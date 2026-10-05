@@ -1,4 +1,4 @@
-﻿# CODEOWNERS â€” project roster + review policy
+# CODEOWNERS â€” project roster + review policy
 #
 # This file is BOTH the team roster AND the code-owner rule for this repo.
 # The rule at the bottom (starting with `*`) is what GitHub enforces:
@@ -14,6 +14,7 @@
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # (add members here as they join, one per line)
 
+# @cheiman2007
 # â”€â”€ Review policy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Everyone listed on the rule below is a Code Owner. GitHub will require
 # at least one of them to approve any PR targeting `main`.
