@@ -5,7 +5,7 @@
 # it auto-requests review from the listed owners on any PR into `main`.
 
 # â”€â”€ Project Managers (code owners for main-branch merges) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Full name        GitHub handle    Email
+# Lucas Whitaker        Townview2025    lucasaandm24@tamu.edu
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # (add PMs here when the project starts, one per line)
 
@@ -15,6 +15,10 @@
 # (add members here as they join, one per line)
 
 # @cheiman2007
+# @AaryaShewale
+# @Vedik-RR07
+# @pishy046
+# @Abraham001l
 # â”€â”€ Review policy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Everyone listed on the rule below is a Code Owner. GitHub will require
 # at least one of them to approve any PR targeting `main`.

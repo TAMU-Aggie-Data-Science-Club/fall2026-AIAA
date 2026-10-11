@@ -6,6 +6,13 @@
 data/*
 !data/.gitkeep
 
+# Same rule for data/ folders nested inside subprojects, e.g.
+# adsc-deliverable1/data/. The pattern above contains a slash and so is
+# anchored to the repo root; these are not. Deliverable datasets can be
+# very large (the planets-motions dataset is ~1.38 GB).
+**/data/*
+!**/data/.gitkeep
+
 # --- Agent / private working notes ----------------------------------------
 # Scratch planning files (see AGENTS.md) — never part of a PR.
 .planning/
