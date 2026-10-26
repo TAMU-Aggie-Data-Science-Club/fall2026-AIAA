@@ -38,7 +38,16 @@ from scipy.integrate import solve_ivp
 import hapsira as haspira
 
 
-      
-"""   def transLunarEjection( J ):
-      j = 67 """
+class Burns:
+
+    def __init__(self, J )
+    J = 0
+
+   # def TransLunarEjection( J)
+   # free return trajectory
+
+
+
+
+
 
