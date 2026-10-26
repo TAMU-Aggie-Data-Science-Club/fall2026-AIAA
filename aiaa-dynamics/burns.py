@@ -5,15 +5,40 @@
 #   IF NEED HELP, CONTACT "aaryashewale@tamu.edu"  #
 ####################################################
 
- class Burns:
+###########
+# IMPORTS #
+###########
 
-    def __init__(self, J )
-    J = 0
-    
+# Astropy: physical units and time handling
+import astropy.units as units
+from astropy import time
+from astropy.time import Time
 
-    def HohmannTransfer()
+# NumPy: basic numerical routines
+import numpy as np
 
-    def BiEllipticTransfer()
+# jplephem: planetary ephemerides via SPICE/SPK kernels
+from jplephem.spk import SPK
 
-    def TransLunarEjection( J , )
-    # free return trajectory
+# matplotlib: static orbit plotting
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (enables 3D projection)
+
+# numba: JIT acceleration (CPython only)
+from numba import njit
+
+# Plotly: interactive orbit plotting
+import plotly.graph_objects as go
+
+# SciPy: root finding and numerical propagation
+from scipy.optimize import brentq, newton
+from scipy.integrate import solve_ivp
+
+# Haspira: Earth, Moon, Sun celesial bodies 
+import hapsira as haspira
+
+
+      
+"""   def transLunarEjection( J ):
+      j = 67 """
+
