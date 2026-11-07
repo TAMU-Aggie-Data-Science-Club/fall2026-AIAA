@@ -29,11 +29,21 @@ Usage (from aiaa-dynamics/)
 Output goes to ../data/processed/ by default (git-ignored — never commit it).
 Read it with:  pandas.read_parquet("data/processed/<file>.parquet")
 """
+import os
+
+# Parallelism comes from worker processes, so every process gets ONE math-library
+# thread. Without this, each worker starts a BLAS thread pool sized to the whole
+# CPU (32 threads x 31 workers) and Windows runs out of commit memory
+# ("The paging file is too small" / "OpenBLAS: Memory allocation failed").
+# Must run before numpy/scipy are imported; workers inherit the environment.
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 import argparse
 import json
-import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime
 from pathlib import Path
 
@@ -66,6 +76,10 @@ SAMPLING_DEFAULTS = {
 }
 
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
+
+# Each worker loads numpy/scipy/numba/matplotlib (~200-300 MB), so cap the default
+# instead of using every core. Raise it with --workers if the machine has RAM to spare.
+DEFAULT_MAX_WORKERS = 8
 STATE_NAMES = ("x", "y", "z", "vx", "vy", "vz")
 
 
@@ -311,7 +325,9 @@ def parse_args():
     ap.add_argument("--start-id", type=int, default=0,
                     help="first run_id (use to append batches without id collisions)")
     ap.add_argument("--coast-days", type=float, default=30.0, help="post-TLI coast length [days]")
-    ap.add_argument("--workers", type=int, default=max((os.cpu_count() or 2) - 1, 1))
+    ap.add_argument("--workers", type=int,
+                    default=max(min((os.cpu_count() or 2) - 1, DEFAULT_MAX_WORKERS), 1),
+                    help=f"worker processes (default: cores - 1, capped at {DEFAULT_MAX_WORKERS})")
     ap.add_argument("--chunk-size", type=int, default=20, help="runs per worker task")
     ap.add_argument("--out", type=Path, default=None, help="output .parquet path for the runs table")
     ap.add_argument("--save-trajectories", action="store_true",
@@ -391,6 +407,10 @@ def main():
                     handle(*fut.result())
     except KeyboardInterrupt:
         print("\nInterrupted — keeping the runs finished so far.")
+    except BrokenProcessPool:
+        print(f"\nA worker process died (usually out of memory). Kept the {done} runs finished so far."
+              f"\nRe-run with fewer workers, e.g. --workers {max(args.workers // 2, 1)}, "
+              f"and --start-id {args.start_id + args.runs} --seed {args.seed + 1} to avoid duplicate ids.")
     finally:
         writer.close()
         if traj_writer is not None:
