@@ -100,17 +100,8 @@ def two_body_energy(s, body, mu=MU):
 
 
 class Thresholds:
-
-    @staticmethod
-    def j_calc(m1, m2, x, y, z, xVel, yVel, zVel):
-        """Jacobi constant C = 2U - v^2 for masses m1 (Earth) and m2 (Moon).
-
-        Same convention as dynamics.jacobi (higher C = less energy), so every
-        file in the repo reports the same number. The original version used m1
-        where (1 - mass parameter) belongs and dropped zVel.
-        """
-        mP = m2 / (m1 + m2)   # mass parameter (pi_2)
-        return float(dyn.jacobi(np.array([x, y, z, xVel, yVel, zVel], dtype=float), mP))
+    # The Jacobi constant itself lives in dynamics.jacobi (single source of truth);
+    # these methods only interpret it.
 
     @staticmethod
     def energy_regime(C, mu=MU):
