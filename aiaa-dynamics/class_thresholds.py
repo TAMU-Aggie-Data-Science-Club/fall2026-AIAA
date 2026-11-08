@@ -36,6 +36,11 @@ energetically allowed to do:
   2  L2_open    C_L3 < C < C_L2 can leave the system through L2
   3  L3_open    C_L4 < C < C_L3 can also leave through L3
   4  all_open   C < C_L4        no forbidden region in the plane
+
+Lagrange-region proximity (reported, not used in the outcome label)
+-------------------------------------------------------------------
+mission.py records the closest approach to each of L1..L5 during the coast and
+flags a run as "near" a point if it came within R_NEAR_LAGRANGE_KM of it.
 """
 from math import sqrt
 
@@ -53,6 +58,7 @@ R_MOON = dyn.R_MOON                      # impact radius, Moon surface
 R_ESCAPE = 4.0                           # LU from barycenter; same as dynamics.propagate / TLIs.R_ESCAPE
 R_HILL_MOON = (MU / 3.0) ** (1.0 / 3.0)  # Moon's Hill sphere, ~0.159 LU (~61,300 km)
 CAPTURE_MIN_DWELL_DAYS = 1.0             # time inside the Hill sphere before a bound state counts as capture
+R_NEAR_LAGRANGE_KM = 50_000.0            # "came near L1..L5" radius [km]; mission.py --lagrange-radius-km overrides it
 
 # ---------------------------------------------------------------------------
 # Label tables (ints are what go in the parquet; names are for humans)
