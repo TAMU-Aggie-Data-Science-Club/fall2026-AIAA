@@ -11,7 +11,7 @@
 PROGRAM
 -------------
 
-Simulates a translunar injection (TLI) sequence based on a seriers of user inputs 
+Simulates a translunar injection (TLI) sequence based on a series of user inputs 
 
 
 PHYSICS
@@ -208,13 +208,15 @@ def estimate_period_nd(state, mu):
 
 
 #######################################
-#    Numba-JIT PROPOGATION KERNALS    #
-#   
+#    NUMBA-JIT PROPOGATION KERNALS    #
+#######################################
 
 # (cache = True) saves compiled result to disk to save time
 @njit(cache=True)
 def eom_nb(s, mu):
-    """CR3BP state derivative [vx, vy, vz, ax, ay, az] (compiled)."""
+
+    """CR3BP state derivative [vx, vy, vz, ax, ay, az] (compiled)"""
+
     x, y, z, vx, vy, vz = s
     r1 = np.sqrt((x + mu) ** 2 + y ** 2 + z ** 2)
     r2 = np.sqrt((x - 1.0 + mu) ** 2 + y ** 2 + z ** 2)
@@ -232,22 +234,27 @@ def eom_nb(s, mu):
 
 @njit(cache=True)
 def rk4_step_nb(s, dt, mu):
-    """One classical Runge-Kutta 4 step (compiled)."""
-    k1 = eom_nb(s, mu)
-    k2 = eom_nb(s + 0.5 * dt * k1, mu)
-    k3 = eom_nb(s + 0.5 * dt * k2, mu)
-    k4 = eom_nb(s + dt * k3, mu)
+
+    """Classical Runge-Kutta 4 step (basically adapative step changer for trajectory projection) (compiled)."""
+
+    k1 = eom_nb(s, mu)                       # Step 1
+    k2 = eom_nb(s + 0.5 * dt * k1, mu)       # Step 2
+    k3 = eom_nb(s + 0.5 * dt * k2, mu)       # Step 3
+    k4 = eom_nb(s + dt * k3, mu)             # Step 4
+
     return s + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
 
 
 @njit(cache=True)
 def propagate_nb(s0, dt, nsteps, mu, r_earth, r_moon, r_escape):
-    """Fixed-step RK4 propagation with event checks, entirely compiled.
+
+    """Fixed-step RK4 propagation with event checks at every step (compiled)
 
     Returns (traj, n_valid, code): traj has nsteps+1 rows but only the first
-    n_valid+1 are meaningful; code = 0 (ran to completion), 1 (Earth
-    impact), 2 (Moon impact), 3 (escape). The stopping row is included.
+    n_valid+1 are meaningful; The rest is code for ending the simulation. 
+    The stopping row is included.
     """
+
     traj = np.empty((nsteps + 1, 6))
     traj[0] = s0
     s = s0.copy()
@@ -257,18 +264,23 @@ def propagate_nb(s0, dt, nsteps, mu, r_earth, r_moon, r_escape):
         r1 = np.sqrt((s[0] + mu) ** 2 + s[1] ** 2 + s[2] ** 2)
         r2 = np.sqrt((s[0] - 1.0 + mu) ** 2 + s[1] ** 2 + s[2] ** 2)
         rr = np.sqrt(s[0] ** 2 + s[1] ** 2 + s[2] ** 2)
+
+        # Event checks
         if r1 < r_earth:
-            return traj, i + 1, 1
+            return traj, i + 1, 1 # Code = 1 (Earth impact)
         if r2 < r_moon:
-            return traj, i + 1, 2
+            return traj, i + 1, 2 # Code = 2 (Moon impact)
         if rr > r_escape:
-            return traj, i + 1, 3
-    return traj, nsteps, 0
+            return traj, i + 1, 3 # Code = 3 (escape from system)
+        
+    return traj, nsteps, 0        # Code = 0 (ran to completion)
 
 
 @njit(cache=True)
 def jacobi_series_nb(traj, mu):
+
     """Jacobi constant at every row of an (N, 6) trajectory (compiled)."""
+    
     n = traj.shape[0]
     out = np.empty(n)
     for i in range(n):
@@ -277,25 +289,29 @@ def jacobi_series_nb(traj, mu):
         r2 = np.sqrt((x - 1.0 + mu) ** 2 + y ** 2 + z ** 2)
         out[i] = (x ** 2 + y ** 2 + 2.0 * (1.0 - mu) / r1 + 2.0 * mu / r2
                   - (vx ** 2 + vy ** 2 + vz ** 2))
+        
     return out
 
 
-_EVENT_NAMES = [None, "earth_impact", "moon_impact", "escape"]
+_EVENT_NAMES = [None, "earth_impact", "moon_impact", "escape"] # From propagate_nb function
 R_ESCAPE = 4.0           # LU from the barycenter, same as dynamics.propagate
 MAX_DT_ND = 1.0e-5       # RK4 step ceiling (about 3.75 s); keeps C conserved to ~1e-8
 SOLVER = "numba"         # set from --solver in main()
 
 
 def propagate_segment(state, tf_nd, mu, n_points, rtol=1e-10, atol=1e-10):
+
     """Propagate `state` forward by tf_nd. Returns (t, traj (N, 6), termination).
 
     With the numba solver the whole path is computed at a fixed step of at
     most MAX_DT_ND and every step is kept (n_points is ignored); with the
-    scipy solver `dynamics.propagate` is used and sampled at n_points.
+    scipy solver `dynamics.propagate' (from the dynamics.py file) is used and sampled at n_points.
     """
     if SOLVER == "scipy":
+
         t, S, termination = dyn.propagate(state, tf_nd, mu=mu, n_points=n_points,
                                            rtol=rtol, atol=atol)
+        
         return t, S.T, termination
 
     nsteps = max(int(np.ceil(tf_nd / MAX_DT_ND)), 10)
@@ -306,8 +322,8 @@ def propagate_segment(state, tf_nd, mu, n_points, rtol=1e-10, atol=1e-10):
     return t, traj[: n_valid + 1], _EVENT_NAMES[code]
 
 
-def propagate_until_next_perigee(state, mu, window_lo=0.5, window_hi=1.3,
-                                  min_period_nd=0.05, points_per_period=1500):
+def propagate_until_next_perigee(state, mu, window_lo=0.5, window_hi=1.3,min_period_nd=0.05, points_per_period=1500):
+    
     """Propagate from `state` (assumed at/near perigee) forward by roughly
     one orbit and locate the next perigee as the minimum Earth range within
     a search window of [window_lo, window_hi] x (the two-body period
@@ -326,7 +342,9 @@ def propagate_until_next_perigee(state, mu, window_lo=0.5, window_hi=1.3,
     of the starting point, which is trivially a local minimum when `state`
     is itself already at perigee) finds the genuine next perigee crossing
     regardless of how small that oscillation is.
+
     """
+
     T_est = max(estimate_period_nd(state, mu), min_period_nd)
     total_t = window_hi * T_est
     n_points = max(int(points_per_period * window_hi), 300)
@@ -341,12 +359,17 @@ def propagate_until_next_perigee(state, mu, window_lo=0.5, window_hi=1.3,
     return traj[: idx + 1], idx, t[: idx + 1]
 
 
-# ---------------------------------------------------------------------------
-# Main simulation driver
-# ---------------------------------------------------------------------------
+################################
+#    Main simulation driver    #
+################################
+
+
 def run_simulation(parking_altitude_km, num_intermediate_burns,
                     intermediate_dv_kms, tli_dv_kms, theta0_deg,
                     coast_days, coast_steps=4000):
+
+    ''' Main function to '''
+    
     mu = MU
 
     state0 = circular_parking_state(parking_altitude_km, np.deg2rad(theta0_deg), mu)
@@ -355,7 +378,7 @@ def run_simulation(parking_altitude_km, num_intermediate_burns,
     times_nd = [np.array([0.0])]
     cum_t_nd = 0.0
 
-    burn_points = []     # (x, y, label) for plotting, in nondim coords
+    burn_points = []     # (x, y, label) for plotting, in nondimemsional coordinates 
     burn_log = []
     burn_times_nd = []   # time (nd) at which each burn occurs
     burn_jacobi = []     # (C_before, C_after) for each burn, in that order
@@ -372,9 +395,11 @@ def run_simulation(parking_altitude_km, num_intermediate_burns,
     orbit_is_circular = True
 
     def _record_segment(seg, t_seg):
+
         """Append a propagated segment (sharing its first point with the
         previous one) to the trajectory/time history, using the actual
         time points dynamics.propagate produced for this segment."""
+        
         nonlocal cum_t_nd
         full_traj.append(seg[1:])
         seg_t = cum_t_nd + t_seg[1:]
@@ -483,7 +508,7 @@ def plot_trajectory(results, out_path="translunar_trajectory.png"):
     # Spacecraft trajectory (nondim coords -> plot directly, label in LU)
     ax.plot(traj[:, 0], traj[:, 1], lw=1.0, color="tab:blue", label="Spacecraft trajectory")
 
-    # Earth and Moon (rotating frame: fixed positions)
+    # Earth and Moon (rotating frame: fixed positions) (size not to scale)
     ax.scatter([-mu], [0], s=250, color="tab:green", zorder=5, label="Earth")
     ax.scatter([1 - mu], [0], s=90, color="gray", zorder=5, label="Moon")
 
@@ -522,7 +547,7 @@ def plot_trajectory(results, out_path="translunar_trajectory.png"):
 
     # Give the burn-label callouts room above the trajectory
     ymin, ymax = ax.get_ylim()
-    ax.set_ylim(ymin, ymax + 0.12 * (ymax - ymin))
+    ax.set_ylim(ymin, ymax * (ymax - ymin))
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
@@ -536,19 +561,19 @@ def plot_trajectory(results, out_path="translunar_trajectory.png"):
 
 _INPUTS = [
 
-    ("parking_altitude_km", "--parking-altitude-km", float, 300.0,
+    ("parking_altitude_km", "--parking-altitude-km", float , 300 ,
      "Parking orbit altitude [km] [Example: 200.0]", lambda v: v > 0),
 
-    ("num_intermediate_burns", "--num-intermediate-burns", int, 2,
+    ("num_intermediate_burns", "--num-intermediate-burns", int , 2 ,
      "Number of intermediate burns before TLI [Example: 2]", lambda v: v >= 0),
 
-    ("intermediate_dv_kms", "--intermediate-dv-kms", float, 0.03,
+    ("intermediate_dv_kms", "--intermediate-dv-kms", float , 0.03 ,
      "Delta-v of each intermediate burn [km/s] [Example: 0.03]", lambda v: v >= 0),
 
-    ("tli_dv_kms", "--tli-dv-kms", float, 3.04,
+    ("tli_dv_kms", "--tli-dv-kms", float , 3.04 , 
      "Delta-v of the final TLI burn [km/s] [Example: 3.04]", lambda v: v > 0),
 
-    ("theta0_deg", "--theta0-deg", float, 242.0,
+    ("theta0_deg", "--theta0-deg" , float, 240.0 ,
      "Starting angle in parking orbit [deg] [Example: 242]\n"
      "(think top-down 2D Earth view with angle being centered at Earth's core)", lambda v: True),
 
@@ -562,7 +587,7 @@ OUT_FILE = "translunar_trajectory.png"
 
 def prompt_value(text, default, typ, valid):
 
-    """Check and returns only good input and if bad, asks for input again"""
+    """Check and returns valid input and if invalid, asks for input again"""
     
     while True:
 
@@ -583,9 +608,11 @@ def prompt_value(text, default, typ, valid):
 
 
 def parse_args():
+
     """Collect inputs. Any value not given as a command-line flag is asked
     for interactively (press Enter to accept the shown default). Pass
     --no-prompt to skip all questions and use defaults/flags only."""
+    
     p = argparse.ArgumentParser(
         description="Simulate a multi-burn translunar injection in the Earth-Moon CR3BP. "
                     "Values not given as flags are prompted for interactively."
