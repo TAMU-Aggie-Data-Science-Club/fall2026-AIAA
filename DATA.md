@@ -33,7 +33,7 @@ Document every source here as you adopt it. Replace these placeholders.
 | Source | Origin / URL | Access method | License | Sensitivity | Notes |
 |--------|--------------|---------------|---------|-------------|-------|
 | _e.g. Example Open Dataset_ | `https://…` | Manual download → `data/raw/` | CC-BY-4.0 | None | Updated annually |
-| | | | | | |
+| AIAA CR3BP mission simulations | Generated in-repo by [`aiaa-dynamics/mission.py`](aiaa-dynamics/mission.py) | `python mission.py --runs N` → `data/processed/cr3bp_runs_*.parquet` | Club-generated (no external license) | None | Synthetic Earth-Moon CR3BP TLI runs, one row per run + optional trajectory table. Reproducible from `--seed`; run config is in the parquet metadata. Schema: [`aiaa-dynamics/README.md`](aiaa-dynamics/README.md) |
 
 ## Local layout convention
 
