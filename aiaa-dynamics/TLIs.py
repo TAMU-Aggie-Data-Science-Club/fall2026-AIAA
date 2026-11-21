@@ -74,7 +74,7 @@ Run with -h / --help to see all options.
 #    IMPORTS    #
 #################
 
-import argparse                      # Python's built-in parser
+import argparse                      # Python's built-in parser (reads command line flags like '--solver')
 import sys                           # Python's built-in system module 
 import numpy as np                   # Math library of commands and functions
 from numba import njit               # A tool that directly translates python to machine code for fast computations
@@ -111,7 +111,7 @@ def earth_range(traj, mu):
     """traj: (N, 6) array -> (N,) distances to Earth.
        Returns spacecraft's non-dimensional position away from Earth """
     
-    r1 , _ = dyn.distances(traj[:, 0], traj[:, 1], traj[:, 2], mu)
+    r1 , moon_distance = dyn.distances(traj[:, 0], traj[:, 1], traj[:, 2], mu)
 
     return r1
 
@@ -120,7 +120,7 @@ def moon_range(traj, mu):
     """traj: (N, 6) array -> (N,) distances to Moon.
        Returns spacecraft's non-dimensional position away from Moon """
 
-    _ , r2 = dyn.distances(traj[:, 0], traj[:, 1], traj[:, 2], mu)
+    earth_distance , r2 = dyn.distances(traj[:, 0], traj[:, 1], traj[:, 2], mu)
 
     return r2
 
@@ -172,11 +172,14 @@ def apply_prograde_burn(state, dv_nd):
     # Copying velocity components
     v = s[3:6]
     speed = np.linalg.norm(v)
+
     if speed < 1e-12:
+
         # Raises error if velocity is zero because no direction would exist
         raise ValueError("Cannot apply a prograde burn: velocity is ~zero.")
     v_hat = v / speed
     s[3:6] = v + dv_nd * v_hat
+
     return s
 
 def estimate_period_nd(state, mu):
@@ -197,13 +200,17 @@ def estimate_period_nd(state, mu):
 
     mu_e = MU_EARTH_ND
     eps = 0.5 * v2 - mu_e / r  # specific orbital energy (two-body, Earth-only)
+
     if eps >= 0:
+
         # Unbound (hyperbolic/parabolic) two-body estimate -> no periodic
         # orbit; fall back to a generous fixed window.
         return 10.0
+    
     a = -mu_e / (2.0 * eps)
     T = 2.0 * np.pi * np.sqrt(a ** 3 / mu_e)
     # Returns period in non-dimensional time units (1 TU = ~4.94 days)
+
     return T
 
 
@@ -211,8 +218,8 @@ def estimate_period_nd(state, mu):
 #    NUMBA-JIT PROPOGATION KERNALS    #
 #######################################
 
-# (cache = True) saves compiled result to disk to save time
-@njit(cache=True)
+# Heavily used functions which are save the compiled result to disk to save time
+@njit(cache = True)
 def eom_nb(s, mu):
 
     """CR3BP state derivative [vx, vy, vz, ax, ay, az] (compiled)"""
@@ -232,7 +239,7 @@ def eom_nb(s, mu):
     return out
 
 
-@njit(cache=True)
+@njit(cache = True)
 def rk4_step_nb(s, dt, mu):
 
     """Classical Runge-Kutta 4 step (basically adapative step changer for trajectory projection) (compiled)."""
@@ -245,7 +252,7 @@ def rk4_step_nb(s, dt, mu):
     return s + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
 
 
-@njit(cache=True)
+@njit(cache = True)
 def propagate_nb(s0, dt, nsteps, mu, r_earth, r_moon, r_escape):
 
     """Fixed-step RK4 propagation with event checks at every step (compiled)
@@ -276,7 +283,7 @@ def propagate_nb(s0, dt, nsteps, mu, r_earth, r_moon, r_escape):
     return traj, nsteps, 0        # Code = 0 (ran to completion)
 
 
-@njit(cache=True)
+@njit(cache = True)
 def jacobi_series_nb(traj, mu):
 
     """Jacobi constant at every row of an (N, 6) trajectory (compiled)."""
@@ -293,7 +300,7 @@ def jacobi_series_nb(traj, mu):
     return out
 
 
-_EVENT_NAMES = [None, "earth_impact", "moon_impact", "escape"] # From propagate_nb function
+EVENT_NAMES = [None, "earth_impact", "moon_impact", "escape"] # From propagate_nb function
 R_ESCAPE = 4.0           # LU from the barycenter, same as dynamics.propagate
 MAX_DT_ND = 1.0e-5       # RK4 step ceiling (about 3.75 s); keeps C conserved to ~1e-8
 SOLVER = "numba"         # set from --solver in main()
@@ -319,7 +326,7 @@ def propagate_segment(state, tf_nd, mu, n_points, rtol=1e-10, atol=1e-10):
     traj, n_valid, code = propagate_nb(np.asarray(state, dtype=float), dt, nsteps, mu,
                                         dyn.R_EARTH, dyn.R_MOON, R_ESCAPE)
     t = dt * np.arange(n_valid + 1)
-    return t, traj[: n_valid + 1], _EVENT_NAMES[code]
+    return t, traj[: n_valid + 1], EVENT_NAMES[code]
 
 
 def propagate_until_next_perigee(state, mu, window_lo=0.5, window_hi=1.3,min_period_nd=0.05, points_per_period=1500):
@@ -363,6 +370,7 @@ def propagate_until_next_perigee(state, mu, window_lo=0.5, window_hi=1.3,min_per
 #    Main simulation driver    #
 ################################
 
+# Function to run simulation in 
 
 def run_simulation(parking_altitude_km, num_intermediate_burns,
                     intermediate_dv_kms, tli_dv_kms, theta0_deg,
@@ -385,13 +393,14 @@ def run_simulation(parking_altitude_km, num_intermediate_burns,
 
     state = state0.copy()
 
-    # The parking orbit starts exactly circular, so it has no genuine
+    # The parking orbit starts exactly circular, so it has no actual
     # perigee to search for yet (the real CR3BP perturbation on a LEO is
     # only meters, well below the adaptive integrator's own noise floor —
     # searching for a "local minimum" there just chases numerical noise).
     # The very first burn is therefore applied directly at state0; once
     # any burn has been applied the orbit is meaningfully eccentric, and
     # perigee search works normally (and reliably) from then on.
+
     orbit_is_circular = True
 
     def _record_segment(seg, t_seg):
@@ -408,10 +417,13 @@ def run_simulation(parking_altitude_km, num_intermediate_burns,
 
     # --- Intermediate (apogee-raising) burns, each applied at perigee ---
     for i in range(num_intermediate_burns):
+
         if not orbit_is_circular:
+
             seg, idx, t_seg = propagate_until_next_perigee(state, mu)
             _record_segment(seg, t_seg)
             state = seg[-1].copy()
+
         orbit_is_circular = False
 
         c_before = float(dyn.jacobi(state, mu))
@@ -430,9 +442,11 @@ def run_simulation(parking_altitude_km, num_intermediate_burns,
 
     # --- Final TLI burn, also applied at the (next) perigee ---
     if not orbit_is_circular:
+
         seg, idx, t_seg = propagate_until_next_perigee(state, mu)
         _record_segment(seg, t_seg)
         state = seg[-1].copy()
+
     orbit_is_circular = False
 
     c_before = float(dyn.jacobi(state, mu))
@@ -449,7 +463,7 @@ def run_simulation(parking_altitude_km, num_intermediate_burns,
         f"|  Jacobi C: {c_before:.6f} -> {c_after:.6f}  (dC = {c_after - c_before:+.6f})"
     )
 
-    # --- Coast phase toward the Moon ---
+    # Coast phase toward the Moon 
     coast_t_nd = dyn.days_to_time(coast_days)
     t_coast, coast_traj, coast_termination = propagate_segment(state, coast_t_nd, mu, coast_steps)
     _record_segment(coast_traj, t_coast)
@@ -465,7 +479,7 @@ def run_simulation(parking_altitude_km, num_intermediate_burns,
     jacobi_initial = float(dyn.jacobi(state0, mu))
     jacobi_final = float(dyn.jacobi(final_state, mu))
 
-    # Closest lunar approach reached during the coast phase (informational)
+    # Closest lunar approach reached during the coast phase
     r_moon_coast = moon_range(coast_traj, mu)
     min_idx = int(np.argmin(r_moon_coast))
     closest_approach_km = r_moon_coast[min_idx] * LU_KM - R_MOON_KM
@@ -476,29 +490,29 @@ def run_simulation(parking_altitude_km, num_intermediate_burns,
 
     results = {
         "mu": mu,
-        "trajectory": trajectory,
-        "times_nd": times_nd_arr,
-        "times_days": dyn.time_to_days(times_nd_arr),
-        "final_state_nd": final_state,
-        "final_state_dim": dyn.to_dimensional(final_state.copy()),
-        "burn_points": burn_points,
-        "burn_log": burn_log,
-        "burn_times_days": dyn.time_to_days(np.array(burn_times_nd)),
-        "burn_jacobi": burn_jacobi,
-        "jacobi_series": jacobi_series,
-        "jacobi_initial": jacobi_initial,
-        "jacobi_final": jacobi_final,
-        "closest_approach_altitude_km": closest_approach_km,
-        "closest_approach_state_dim": dyn.to_dimensional(closest_approach_state.copy()),
-        "coast_termination": coast_termination,
-        "lagrange_points": lagrange_pts,
+        "trajectory":                            trajectory,
+        "times_nd":                              times_nd_arr,
+        "times_days":                            dyn.time_to_days(times_nd_arr),
+        "final_state_nd":                        final_state,
+        "final_state_dim":                       dyn.to_dimensional(final_state.copy()),
+        "burn_points":                           burn_points,
+        "burn_log":                              burn_log,
+        "burn_times_days":                       dyn.time_to_days(np.array(burn_times_nd)),
+        "burn_jacobi":                           burn_jacobi,
+        "jacobi_series":                         jacobi_series,
+        "jacobi_initial":                        jacobi_initial,
+        "jacobi_final":                          jacobi_final,
+        "closest_approach_altitude_km":          closest_approach_km,
+        "closest_approach_state_dim":            dyn.to_dimensional(closest_approach_state.copy()),
+        "coast_termination":                     coast_termination,
+        "lagrange_points":                       lagrange_pts,
     }
     return results
 
 
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
+####################
+#     Plotting     #
+####################
 def plot_trajectory(results, out_path="translunar_trajectory.png"):
     mu = results["mu"]
     traj = results["trajectory"]
@@ -515,7 +529,7 @@ def plot_trajectory(results, out_path="translunar_trajectory.png"):
     # Collinear Lagrange points (L1, L2), from dynamics.lagrange_points
     lp = results["lagrange_points"]
     for name in ("L1", "L2"):
-        px, py, _ = lp[name]
+        px, py, pz = lp[name]
         ax.scatter([px], [py], s=25, marker="x", color="tab:brown", zorder=4)
         ax.annotate(name, (px, py), fontsize=7, color="tab:brown",
                     xytext=(4, -10), textcoords="offset points")
@@ -647,13 +661,18 @@ def main():
     SOLVER = args.solver
 
     print("=" * 70)
+    
     print("Earth-Moon CR3BP Translunar Injection Simulation")
     print("(solver: Numba-JIT RK4)" if args.solver == "numba"
           else "(solver: dynamics.py, SciPy DOP853 adaptive integration)")
+    
     print("-" * 70)
+
     print(f"Final TLI burn       : {args.tli_dv_kms} km/s")
     print(f"Post-TLI coast time  : {args.coast_days} days")
+
     print("-" * 70)
+
 
     results = run_simulation(
         parking_altitude_km=args.parking_altitude_km,
@@ -667,12 +686,14 @@ def main():
 
     print("Burn sequence:")
     for line in results["burn_log"]:
+
         print(line)
 
     fs_nd = results["final_state_nd"]
     fs_dim = results["final_state_dim"]
 
     print("-" * 70)
+
     print("Final state vector (rotating/synodic frame):")
     print(f"  Nondimensional : x={fs_nd[0]: .6f}  y={fs_nd[1]: .6f}  z={fs_nd[2]: .6f}  "
           f"vx={fs_nd[3]: .6f}  vy={fs_nd[4]: .6f}  vz={fs_nd[5]: .6f}")
@@ -680,14 +701,17 @@ def main():
     print(f"                   v = ({fs_dim[3]: .4f}, {fs_dim[4]: .4f}, {fs_dim[5]: .4f}) km/s")
 
     if results["coast_termination"] is not None:
+
         print("-" * 70)
         print(f"NOTE: coast phase ended early due to event: {results['coast_termination']}")
 
     print("-" * 70)
+
     print(f"Closest lunar approach during coast: altitude = "
           f"{results['closest_approach_altitude_km']:.1f} km above the lunar surface")
 
     print("-" * 70)
+
     print("Jacobi constant (conserved between burns; jumps only at each impulsive burn):")
     print(f"  Initial (parking orbit) : C = {results['jacobi_initial']:.6f}")
     for i, (bt, (c_before, c_after)) in enumerate(zip(results["burn_times_days"], results["burn_jacobi"])):
@@ -697,14 +721,10 @@ def main():
     print(f"  Final (end of coast)     : C = {results['jacobi_final']:.6f}")
 
     print("-" * 70)
-    print("Collinear Lagrange points (nondimensional x, rotating frame):")
-    for name in ("L1", "L2", "L3"):
-        px, _, _ = results["lagrange_points"][name]
-        print(f"  {name} : x = {px: .6f}  ({px * LU_KM: .1f} km)")
-
+   
     out_path = plot_trajectory(results, out_path=args.out)
-    print("-" * 70)
     print(f"Trajectory plot saved to: {out_path}")
+
     print("=" * 70)
 
 
